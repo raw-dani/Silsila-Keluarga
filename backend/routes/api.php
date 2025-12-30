@@ -16,6 +16,9 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
+// Public routes (no authentication required)
+Route::get('/slider-data', [AdminController::class, 'getSliderData']);
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // User management
@@ -56,5 +59,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Admin management routes (admin only)
     Route::middleware('admin')->prefix('admin')->group(function () {
         Route::apiResource('users', AdminController::class);
+        Route::post('/upload-slider-image', [AdminController::class, 'uploadSliderImage']);
+        Route::post('/save-slider-data', [AdminController::class, 'saveSliderData']);
     });
 });

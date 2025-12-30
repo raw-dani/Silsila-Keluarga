@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\SliderSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class AdminController extends Controller
@@ -92,5 +94,136 @@ class AdminController extends Controller
             ->findOrFail($id);
 
         return response()->json($user);
+    }
+
+    /**
+     * Upload slider image
+     */
+    public function uploadSliderImage(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
+            'slide_index' => 'required|integer|min:0|max:3'
+        ]);
+
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+
+            // Generate unique filename
+            $filename = 'slide_' . $request->slide_index . '_' . time() . '.' . $file->getClientOriginalExtension();
+
+            // Store in storage/app/public/slider-images
+            $path = $file->storeAs('slider-images', $filename, 'public');
+
+            // Get the public URL
+            $imageUrl = asset('storage/' . $path);
+
+            return response()->json([
+                'message' => 'Gambar slider berhasil diupload',
+                'image_path' => $imageUrl,
+                'filename' => $filename
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'File gambar tidak ditemukan'
+        ], 400);
+    }
+
+    /**
+     * Get slider data
+     */
+    public function getSliderData()
+    {
+        // Get slider data from database, ordered by slide_index
+        $slides = SliderSetting::orderBy('slide_index')->get();
+
+        // If no data exists, return default data
+        if ($slides->isEmpty()) {
+            $defaultSlides = [
+                [
+                    'title' => 'Kelola Data Keluarga',
+                    'description' => 'Pantau dan kelola informasi lengkap anggota keluarga Anda dengan mudah',
+                    'image' => null
+                ],
+                [
+                    'title' => 'Sistem Approval Modern',
+                    'description' => 'Permintaan perubahan data melalui sistem approval yang aman dan terstruktur',
+                    'image' => null
+                ],
+                [
+                    'title' => 'Visualisasi Pohon Keluarga',
+                    'description' => 'Lihat struktur keluarga dalam bentuk pohon yang mudah dipahami',
+                    'image' => null
+                ],
+                [
+                    'title' => 'Keamanan & Privasi',
+                    'description' => 'Data keluarga Anda aman dengan sistem keamanan modern',
+                    'image' => null
+                ]
+            ];
+
+            return response()->json($defaultSlides);
+        }
+
+        // Format the data for frontend
+        $formattedSlides = $slides->map(function ($slide) {
+            return [
+                'title' => $slide->title,
+                'description' => $slide->description,
+                'image' => $slide->image_path ? asset('storage/' . $slide->image_path) : null,
+                'is_visible' => $slide->is_visible
+            ];
+        });
+
+        return response()->json($formattedSlides);
+    }
+
+    /**
+     * Save slider data
+     */
+    public function saveSliderData(Request $request)
+    {
+        try {
+            $request->validate([
+                'slides' => 'required|array|min:4|max:4',
+                'slides.*.title' => 'required|string|max:255',
+                'slides.*.description' => 'required|string|max:1000',
+                'slides.*.image' => 'nullable|string|url',
+                'slides.*.is_visible' => 'boolean'
+            ]);
+
+        $slides = $request->slides;
+
+        foreach ($slides as $index => $slideData) {
+            // Extract image path from full URL
+            $imagePath = null;
+            if ($slideData['image']) {
+                $storageUrl = asset('storage/');
+                if (strpos($slideData['image'], $storageUrl) === 0) {
+                    $imagePath = str_replace($storageUrl, '', $slideData['image']);
+                }
+            }
+
+            SliderSetting::updateOrCreate(
+                ['slide_index' => $index],
+                [
+                    'title' => $slideData['title'],
+                    'description' => $slideData['description'],
+                    'image_path' => $imagePath,
+                    'is_visible' => $slideData['is_visible'] ?? true
+                ]
+            );
+        }
+
+            return response()->json([
+                'message' => 'Pengaturan slider berhasil disimpan'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal menyimpan slider: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
