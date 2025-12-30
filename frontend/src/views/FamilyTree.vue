@@ -8,67 +8,6 @@
         <p>Visualisasi interaktif silsilah keluarga dengan fitur zoom dan pan</p>
       </div>
 
-      <!-- Search Section -->
-      <div class="search-section">
-        <div class="search-container">
-          <div class="search-input-wrapper">
-            <input
-              type="text"
-              v-model="searchQuery"
-              @input="handleSearch"
-              @keydown.enter="searchMembers"
-              placeholder="Cari nama anggota keluarga..."
-              class="search-input"
-            >
-            <button @click="searchMembers" class="search-btn">
-              <span class="btn-icon">🔍</span>
-            </button>
-            <button v-if="searchQuery" @click="clearSearch" class="clear-btn">
-              <span class="btn-icon">✕</span>
-            </button>
-          </div>
-
-          <!-- Search Results -->
-          <div v-if="searchResults.length > 0" class="search-results">
-            <div class="results-header">
-              <span>Ditemukan {{ searchResults.length }} hasil</span>
-            </div>
-            <div class="results-list">
-              <div
-                v-for="result in searchResults"
-                :key="result.id"
-                @click="focusOnMember(result.id)"
-                class="result-item"
-                :class="{ active: highlightedMember === result.id }"
-              >
-                <div class="result-avatar">
-                  <img v-if="result.photo" :src="getPhotoUrl(result.photo)" :alt="result.name">
-                  <span v-else class="avatar-placeholder">
-                    {{ result.gender === 'male' ? '👨' : result.gender === 'female' ? '👩' : '👤' }}
-                  </span>
-                </div>
-                <div class="result-info">
-                  <div class="result-name">{{ result.name }}</div>
-                  <div class="result-details">
-                    <span v-if="result.memberType === 'family'" class="generation">{{ getGenerationName(result.generation) }}</span>
-                    <span v-else class="generation menantu">Menantu</span>
-                    <span class="relationship" v-if="result.relationship">{{ result.relationship }}</span>
-                  </div>
-                </div>
-                <button @click.stop="focusOnMember(result.id)" class="focus-btn">
-                  <span class="btn-icon">📍</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="searchQuery && searchResults.length === 0 && !searching" class="no-results">
-            <span class="no-results-icon">🔍</span>
-            <span>Tidak ditemukan "{{ searchQuery }}"</span>
-          </div>
-        </div>
-      </div>
-
       <div class="tree-controls">
         <button @click="zoomIn" class="control-btn">
           <span class="btn-icon">🔍</span>
@@ -85,10 +24,6 @@
         <button @click="centerTree" class="control-btn">
           <span class="btn-icon">📍</span>
           <span>Center</span>
-        </button>
-        <button v-if="highlightedMember" @click="clearHighlight" class="control-btn highlight-btn">
-          <span class="btn-icon">🎯</span>
-          <span>Clear Highlight</span>
         </button>
       </div>
 
@@ -120,12 +55,6 @@ const treeContainer = ref(null)
 const svgElement = ref(null)
 const loading = ref(true)
 const familyData = ref([])
-
-// Search related variables
-const searchQuery = ref('')
-const searchResults = ref([])
-const highlightedMember = ref(null)
-const searching = ref(false)
 
 let svg = null
 let g = null
@@ -513,151 +442,6 @@ const handleResize = () => {
     centerTree()
   }
 }
-
-// Search functions
-const handleSearch = () => {
-  // Debounced search
-  clearTimeout(window.searchTimeout)
-  searching.value = true
-
-  window.searchTimeout = setTimeout(() => {
-    searchMembers()
-  }, 300)
-}
-
-const searchMembers = () => {
-  if (!searchQuery.value.trim()) {
-    searchResults.value = []
-    return
-  }
-
-  const query = searchQuery.value.toLowerCase().trim()
-  const foundMembers = new Map() // Use Map to deduplicate by ID
-
-  // Flatten the tree data for search
-  const flattenTree = (nodes) => {
-    nodes.forEach(node => {
-      if (node.name && node.name.toLowerCase().includes(query)) {
-        // Skip if already found
-        if (foundMembers.has(node.id)) return
-
-        // Determine relationship info and member type
-        let relationship = ''
-        let memberType = 'family' // 'family' or 'spouse'
-        let displayGeneration = node.generation
-
-        // Check if this is a spouse (has spouse but no children)
-        if (node.spouse_id && (!node.children || node.children.length === 0)) {
-          // This might be a spouse added to the family
-          memberType = 'spouse'
-          displayGeneration = null // Don't show generation for spouses
-        } else if (node.father_id || node.mother_id) {
-          relationship = getRelationshipInfo(node)
-        }
-
-        foundMembers.set(node.id, {
-          ...node,
-          relationship: relationship,
-          memberType: memberType,
-          displayGeneration: displayGeneration
-        })
-      }
-
-      if (node.children && node.children.length > 0) {
-        flattenTree(node.children)
-      }
-    })
-  }
-
-  flattenTree(familyData.value)
-
-  // Convert Map to array
-  const results = Array.from(foundMembers.values())
-  searchResults.value = results
-  searching.value = false
-
-  console.log(`Search results for "${query}":`, results)
-}
-
-const getRelationshipInfo = (member) => {
-  const relations = []
-
-  if (member.father_id) {
-    const father = familyData.value.find(m => m.id == member.father_id)
-    if (father) relations.push(`Anak dari ${father.name}`)
-  }
-
-  if (member.mother_id) {
-    const mother = familyData.value.find(m => m.id == member.mother_id)
-    if (mother) relations.push(`Anak dari ${mother.name}`)
-  }
-
-  if (member.spouse_id) {
-    const spouse = familyData.value.find(m => m.id == member.spouse_id)
-    if (spouse) relations.push(`Pasangan ${spouse.name}`)
-  }
-
-  return relations.length > 0 ? relations.join(', ') : ''
-}
-
-const focusOnMember = (memberId) => {
-  // Check if this member is a spouse, and if so, highlight their spouse instead
-  const member = familyData.value.find(m => m.id == memberId)
-  if (member && member.memberType === 'spouse' && member.spouse_id) {
-    // This is a spouse, highlight their actual family member instead
-    highlightedMember.value = member.spouse_id
-    highlightNode(member.spouse_id)
-  } else {
-    highlightedMember.value = memberId
-    highlightNode(memberId)
-  }
-
-  if (!root || !svg || !zoom) return
-
-  // Find the node in the tree (use the potentially corrected memberId)
-  const targetNode = root.descendants().find(d => d.data.id == highlightedMember.value)
-
-  if (targetNode) {
-    // Calculate the transform to center on this node
-    const containerRect = treeContainer.value.getBoundingClientRect()
-    const scale = 1.2 // Slightly zoomed in for better focus
-    const translateX = containerRect.width / 2 - targetNode.x * scale
-    const translateY = containerRect.height / 2 - targetNode.y * scale
-
-    // Apply the transform
-    svg.transition().duration(750).call(
-      zoom.transform,
-      d3.zoomIdentity.translate(translateX, translateY).scale(scale)
-    )
-  }
-}
-
-const highlightNode = (memberId) => {
-  // Remove previous highlights
-  d3.selectAll('.node').classed('highlighted', false)
-
-  // Add highlight to the target node
-  d3.selectAll('.node')
-    .filter(d => d.data.id == memberId)
-    .classed('highlighted', true)
-    .transition()
-    .duration(500)
-    .style('opacity', 1)
-    .transition()
-    .duration(500)
-    .style('opacity', null) // Return to normal
-}
-
-const clearHighlight = () => {
-  highlightedMember.value = null
-  d3.selectAll('.node').classed('highlighted', false)
-}
-
-const clearSearch = () => {
-  searchQuery.value = ''
-  searchResults.value = []
-  clearHighlight()
-}
 </script>
 
 <style>
@@ -925,221 +709,6 @@ const clearSearch = () => {
   }
 }
 
-/* Search Section Styles */
-.search-section {
-  margin-bottom: 30px;
-}
-
-.search-container {
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.search-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  background: white;
-  border-radius: 25px;
-  border: 2px solid rgba(107, 79, 63, 0.2);
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-}
-
-.search-input-wrapper:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(107, 79, 63, 0.1);
-}
-
-.search-input {
-  flex: 1;
-  padding: 12px 16px;
-  border: none;
-  outline: none;
-  font-size: 16px;
-  background: transparent;
-  color: var(--text-primary);
-}
-
-.search-input::placeholder {
-  color: var(--text-secondary);
-}
-
-.search-btn, .clear-btn {
-  background: none;
-  border: none;
-  padding: 12px 16px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.search-btn:hover {
-  color: var(--primary);
-}
-
-.clear-btn:hover {
-  color: #dc3545;
-}
-
-.search-results {
-  margin-top: 16px;
-  background: white;
-  border-radius: 12px;
-  border: 1px solid rgba(107, 79, 63, 0.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.results-header {
-  padding: 12px 16px;
-  background: rgba(107, 79, 63, 0.05);
-  border-bottom: 1px solid rgba(107, 79, 63, 0.1);
-}
-
-.results-header span {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 14px;
-}
-
-.results-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.result-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(107, 79, 63, 0.05);
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.result-item:hover {
-  background: rgba(107, 79, 63, 0.03);
-}
-
-.result-item.active {
-  background: rgba(107, 79, 63, 0.1);
-}
-
-.result-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  overflow: hidden;
-  margin-right: 12px;
-  flex-shrink: 0;
-}
-
-.result-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  background: var(--bg-secondary);
-}
-
-.result-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.result-name {
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 2px;
-  font-size: 14px;
-}
-
-.result-details {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.generation {
-  background: rgba(107, 79, 63, 0.1);
-  color: var(--primary);
-  padding: 2px 6px;
-  border-radius: 8px;
-  font-weight: 500;
-}
-
-.generation.menantu {
-  background: rgba(255, 193, 7, 0.1);
-  color: #856404;
-}
-
-.relationship {
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-.focus-btn {
-  background: var(--primary);
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.3s ease;
-}
-
-.focus-btn:hover {
-  background: var(--secondary);
-  transform: scale(1.05);
-}
-
-.no-results {
-  margin-top: 16px;
-  padding: 16px;
-  background: rgba(244, 67, 54, 0.1);
-  border: 1px solid rgba(244, 67, 54, 0.2);
-  border-radius: 8px;
-  text-align: center;
-  color: #dc3545;
-}
-
-.no-results-icon {
-  font-size: 24px;
-  margin-bottom: 8px;
-}
-
-/* Highlighted node styles */
-.node.highlighted circle {
-  stroke: #ff6b35 !important;
-  stroke-width: 4px !important;
-  filter: drop-shadow(0 0 8px rgba(255, 107, 53, 0.6));
-}
-
-.node.highlighted text {
-  fill: #ff6b35 !important;
-  font-weight: bold !important;
-}
-
-.highlight-btn {
-  background: linear-gradient(135deg, #ff6b35, #f7931e) !important;
-  color: white !important;
-}
-
 /* Mobile styles */
 @media (max-width: 767px) {
   .family-tree-page {
@@ -1162,50 +731,6 @@ const clearSearch = () => {
     font-size: 0.9rem;
   }
 
-  .search-section {
-    margin-bottom: 20px;
-  }
-
-  .search-container {
-    max-width: 100%;
-  }
-
-  .search-input-wrapper {
-    border-radius: 20px;
-  }
-
-  .search-input {
-    padding: 10px 14px;
-    font-size: 16px; /* Prevent zoom on iOS */
-  }
-
-  .search-btn, .clear-btn {
-    padding: 10px 12px;
-  }
-
-  .result-item {
-    padding: 10px 12px;
-  }
-
-  .result-avatar {
-    width: 35px;
-    height: 35px;
-    margin-right: 10px;
-  }
-
-  .result-name {
-    font-size: 13px;
-  }
-
-  .result-details {
-    font-size: 11px;
-  }
-
-  .focus-btn {
-    padding: 5px 10px;
-    font-size: 11px;
-  }
-
   .tree-controls {
     flex-direction: column;
     align-items: center;
@@ -1225,7 +750,7 @@ const clearSearch = () => {
   }
 
   #tree-container {
-    height: calc(100vh - 350px); /* Adjusted for search section */
+    height: calc(100vh - 280px);
     min-height: 350px;
     border-radius: 12px;
   }
@@ -1255,20 +780,5 @@ const clearSearch = () => {
     dy: 35px;
   }
 
-}
-
-/* Tablet styles */
-@media (min-width: 768px) and (max-width: 1023px) {
-  .search-input {
-    font-size: 16px;
-  }
-
-  #tree-container {
-    height: calc(100vh - 320px); /* Adjusted for search section */
-  }
-
-  .results-list {
-    max-height: 250px;
-  }
 }
 </style>
