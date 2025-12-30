@@ -8,13 +8,73 @@
         <p>Visualisasi interaktif silsilah keluarga dengan fitur zoom dan pan</p>
       </div>
 
+      <!-- Search Section -->
+      <div class="search-section">
+        <div class="search-container">
+          <div class="search-input-wrapper">
+            <input
+              type="text"
+              v-model="searchQuery"
+              @input="handleSearch"
+              @keydown.enter="searchMembers"
+              placeholder="Cari nama anggota keluarga..."
+              class="search-input"
+            >
+            <button @click="searchMembers" class="search-btn">
+              <span class="btn-icon">🔍</span>
+            </button>
+            <button v-if="searchQuery" @click="clearSearch" class="clear-btn">
+              <span class="btn-icon">✕</span>
+            </button>
+          </div>
+
+          <!-- Search Results -->
+          <div v-if="searchResults.length > 0" class="search-results">
+            <div class="results-header">
+              <span>Ditemukan {{ searchResults.length }} hasil</span>
+            </div>
+            <div class="results-list">
+              <div
+                v-for="result in searchResults"
+                :key="result.id"
+                @click="focusOnMember(result.id)"
+                class="result-item"
+                :class="{ active: highlightedMember === result.actualId }"
+              >
+                <div class="result-avatar">
+                  <img v-if="result.photo" :src="getPhotoUrl(result.photo)" :alt="result.name">
+                  <span v-else class="avatar-placeholder">
+                    {{ result.gender === 'male' ? '👨' : result.gender === 'female' ? '👩' : '👤' }}
+                  </span>
+                </div>
+                <div class="result-info">
+                  <div class="result-name">{{ result.name }}</div>
+                <div class="result-details">
+                  <span v-if="shouldShowGeneration(result)" class="generation">{{ getGenerationName(result.generation) }}</span>
+                  <span v-if="result.isSpouseHighlight" class="spouse-note">{{ result.spouse?.name }}</span>
+                </div>
+                </div>
+                <button @click.stop="focusOnMember(result.id)" class="focus-btn">
+                  <span class="btn-icon">📍</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="searchQuery && searchResults.length === 0 && !searching" class="no-results">
+            <span class="no-results-icon">🔍</span>
+            <span>Tidak ditemukan "{{ searchQuery }}"</span>
+          </div>
+        </div>
+      </div>
+
       <div class="tree-controls">
         <button @click="zoomIn" class="control-btn">
-          <span class="btn-icon">🔍</span>
+          <span class="btn-icon">➕</span>
           <span>Zoom In</span>
         </button>
         <button @click="zoomOut" class="control-btn">
-          <span class="btn-icon">🔎</span>
+          <span class="btn-icon">➖</span>
           <span>Zoom Out</span>
         </button>
         <button @click="resetZoom" class="control-btn">
@@ -24,6 +84,10 @@
         <button @click="centerTree" class="control-btn">
           <span class="btn-icon">📍</span>
           <span>Center</span>
+        </button>
+        <button v-if="highlightedMember" @click="clearHighlight" class="control-btn highlight-btn">
+          <span class="btn-icon">🎯</span>
+          <span>Clear Highlight</span>
         </button>
       </div>
 
@@ -55,6 +119,12 @@ const treeContainer = ref(null)
 const svgElement = ref(null)
 const loading = ref(true)
 const familyData = ref([])
+
+// Search related variables
+const searchQuery = ref('')
+const searchResults = ref([])
+const highlightedMember = ref(null)
+const searching = ref(false)
 
 let svg = null
 let g = null
@@ -346,16 +416,37 @@ const convertToHierarchicalFormat = (treeData) => {
   }
 }
 
+const shouldShowGeneration = (result) => {
+  // Don't show generation info if member doesn't have parents (except for root family members)
+  // Root family members (generation 1) always show generation
+  if (result.generation === 1) return true
+
+  // For other members, only show generation if they have parents
+  return result.father_id || result.mother_id
+}
+
 const getGenerationName = (generation) => {
+  // Find the minimum generation in the family tree (root generation)
+  const minGeneration = Math.min(...familyData.value.map(member => member.generation).filter(gen => gen > 0))
+
+  // Calculate relative generation from root
+  const relativeGeneration = generation - minGeneration + 1
+
   const generationNames = {
     0: 'Keluarga',
-    1: 'Pendiri', // Leluhur/Root generation
-    2: 'Penerus', // Successor/Children generation
-    3: 'Cucu',    // Grandchildren generation
-    4: 'Buyut',   // Great-grandchildren generation
-    5: 'Canggah'  // Great-great-grandchildren generation
+    1: 'Generasi 1', // Root generation
+    2: 'Generasi 2', // Children generation
+    3: 'Generasi 3', // Grandchildren generation
+    4: 'Generasi 4', // Great-grandchildren generation
+    5: 'Generasi 5', // Great-great-grandchildren generation
+    6: 'Generasi 6', // Further generations
+    7: 'Generasi 7',
+    8: 'Generasi 8',
+    9: 'Generasi 9',
+    10: 'Generasi 10'
   }
-  return generationNames[generation] || `Gen ${generation}`
+
+  return generationNames[relativeGeneration] || `Generasi ${relativeGeneration}`
 }
 
 const getNodeColor = (gender) => {
@@ -441,6 +532,188 @@ const handleResize = () => {
   if (svg) {
     centerTree()
   }
+}
+
+// Search functions
+const handleSearch = () => {
+  // Debounced search
+  clearTimeout(window.searchTimeout)
+  searching.value = true
+
+  window.searchTimeout = setTimeout(() => {
+    searchMembers()
+  }, 300)
+}
+
+const searchMembers = () => {
+  if (!searchQuery.value.trim()) {
+    searchResults.value = []
+    return
+  }
+
+  const query = searchQuery.value.toLowerCase().trim()
+  const foundMembers = new Map() // Use Map to deduplicate by ID
+
+  // Flatten the tree data for search
+  const flattenTree = (nodes) => {
+    nodes.forEach(node => {
+      if (node.name && node.name.toLowerCase().includes(query)) {
+        // Skip if already found
+        if (foundMembers.has(node.id)) return
+
+        // Check spouse relationship - determine if this member should show spouse highlight note
+        let actualId = node.id
+        let isSpouseHighlight = false
+        let spouseName = ''
+
+        // If member has a spouse, set up spouse highlighting info
+        if (node.spouse_id) {
+          const spouse = familyData.value.find(m => m.id == node.spouse_id)
+          if (spouse) {
+            spouseName = spouse.name
+
+            // Check if this is a menantu (spouse who married into the family)
+            // Logic: generation > 1 AND spouse is generation 1 (married to founder = menantu)
+            const hasParents = node.father_id || node.mother_id
+
+            // Menantu logic: generation > 1 AND married to founder (gen 1) AND no parents
+            // Menantu tidak memiliki ayah maupun ibu (they're from outside the family)
+            if (node.generation > 1 && spouse.generation === 1 && !hasParents) {
+              // This member is a menantu: higher generation, married to founder, no parents
+              isSpouseHighlight = true
+              actualId = spouse.id // Highlight the founder spouse
+              console.log(`✅ MENANTU FOUND: ${node.name} (gen ${node.generation}) is menantu of founder ${spouse.name} (gen ${spouse.generation}) - no parents as expected`)
+            } else if (node.generation === 1 && spouse.generation > 1) {
+              // Member is founder, spouse is potentially menantu
+              // Don't show menantu note when searching for founder
+              actualId = node.id
+              isSpouseHighlight = false
+              console.log(`Founder ${node.name} (gen ${node.generation}) has spouse ${spouse.name} (gen ${spouse.generation})`)
+            } else if (node.generation > 1 && spouse.generation === 1 && hasParents) {
+              // Has parents and married to founder - likely a family member who married
+              actualId = node.id
+              isSpouseHighlight = false
+              console.log(`Family member ${node.name} (gen ${node.generation}) married to founder ${spouse.name} but has parents - not menantu`)
+            } else {
+              // Other cases (same generation or other patterns)
+              actualId = node.id
+              isSpouseHighlight = false
+              console.log(`Other case: ${node.name} (gen ${node.generation}) and ${spouse.name} (gen ${spouse.generation})`)
+            }
+          } else {
+            console.log(`Spouse not found for ${node.name}, spouse_id: ${node.spouse_id}`)
+          }
+        }
+
+        foundMembers.set(node.id, {
+          ...node,
+          actualId: actualId,
+          isSpouseHighlight: isSpouseHighlight,
+          spouseName: spouseName
+        })
+      }
+
+      if (node.children && node.children.length > 0) {
+        flattenTree(node.children)
+      }
+    })
+  }
+
+  // Search through all family data (not just visible tree)
+  flattenTree(familyData.value)
+
+  // Convert Map to array
+  const results = Array.from(foundMembers.values())
+  searchResults.value = results
+  searching.value = false
+
+  console.log(`Search results for "${query}":`, results)
+}
+
+const focusOnMember = (memberId) => {
+  let actualMemberId = memberId
+  let isSpouseHighlight = false
+  let spouseName = ''
+
+  // Check if this member is visible in the tree
+  const originalNode = root.descendants().find(d => d.data.id == memberId)
+
+  if (!originalNode) {
+    // Member not in tree, try to find their spouse
+    const member = familyData.value.find(m => m.id == memberId)
+    if (member && member.spouse_id) {
+      const spouse = familyData.value.find(m => m.id == member.spouse_id)
+      if (spouse) {
+        // Check if spouse is in the tree
+        const spouseNode = root.descendants().find(d => d.data.id == member.spouse_id)
+        if (spouseNode) {
+          actualMemberId = member.spouse_id
+          isSpouseHighlight = true
+          spouseName = spouse.name
+          console.log(`Member ${member.name} not in tree, highlighting spouse ${spouse.name}`)
+        }
+      }
+    }
+  }
+
+  highlightedMember.value = actualMemberId
+
+  if (!root || !svg || !zoom) return
+
+  // Find the node in the tree
+  const targetNode = root.descendants().find(d => d.data.id == actualMemberId)
+
+  if (targetNode) {
+    // Calculate the transform to center on this node
+    const containerRect = treeContainer.value.getBoundingClientRect()
+    const scale = 1.2 // Slightly zoomed in for better focus
+    const translateX = containerRect.width / 2 - targetNode.x * scale
+    const translateY = containerRect.height / 2 - targetNode.y * scale
+
+    // Apply the transform
+    svg.transition().duration(750).call(
+      zoom.transform,
+      d3.zoomIdentity.translate(translateX, translateY).scale(scale)
+    )
+
+    // Highlight the node
+    highlightNode(actualMemberId)
+  }
+
+  // Update the result item to show spouse highlight info
+  const resultIndex = searchResults.value.findIndex(r => r.id === memberId)
+  if (resultIndex !== -1) {
+    searchResults.value[resultIndex].actualId = actualMemberId
+    searchResults.value[resultIndex].isSpouseHighlight = isSpouseHighlight
+    searchResults.value[resultIndex].spouseName = spouseName
+  }
+}
+
+const highlightNode = (memberId) => {
+  // Remove previous highlights
+  d3.selectAll('.node').classed('highlighted', false)
+
+  // Add highlight to the target node
+  d3.selectAll('.node')
+    .filter(d => d.data.id == memberId)
+    .classed('highlighted', true)
+    .transition()
+    .duration(500)
+    .style('opacity', 1)
+    .transition()
+    .duration(500)
+    .style('opacity', null) // Return to normal
+}
+
+const clearHighlight = () => {
+  highlightedMember.value = null
+  d3.selectAll('.node').classed('highlighted', false)
+}
+
+const clearSearch = () => {
+  searchQuery.value = ''
+  searchResults.value = []
+  clearHighlight()
 }
 </script>
 
@@ -709,6 +982,229 @@ const handleResize = () => {
   }
 }
 
+/* Search Section Styles */
+.search-section {
+  margin-bottom: 30px;
+}
+
+.search-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: white;
+  border-radius: 25px;
+  border: 2px solid rgba(107, 79, 63, 0.2);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.search-input-wrapper:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(107, 79, 63, 0.1);
+}
+
+.search-input {
+  flex: 1;
+  padding: 12px 16px;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.search-btn, .clear-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: white;
+  color: #495057;
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.search-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #f8f9fa;
+  border-color: #dee2e6;
+  color: var(--primary);
+}
+
+.clear-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #f8f9fa;
+  border-color: #dee2e6;
+  color: #dc3545;
+}
+
+.search-results {
+  margin-top: 16px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid rgba(107, 79, 63, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.results-header {
+  padding: 12px 16px;
+  background: rgba(107, 79, 63, 0.05);
+  border-bottom: 1px solid rgba(107, 79, 63, 0.1);
+}
+
+.results-header span {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.results-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(107, 79, 63, 0.05);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.result-item:hover {
+  background: rgba(107, 79, 63, 0.03);
+}
+
+.result-item.active {
+  background: rgba(107, 79, 63, 0.1);
+}
+
+.result-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.result-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: var(--bg-secondary);
+}
+
+.result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+  font-size: 14px;
+}
+
+.result-details {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.generation {
+  background: rgba(107, 79, 63, 0.1);
+  color: var(--primary);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.spouse-note {
+  color: var(--accent);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.focus-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.3s ease;
+}
+
+.focus-btn:hover {
+  background: var(--secondary);
+  transform: scale(1.05);
+}
+
+.no-results {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.2);
+  border-radius: 8px;
+  text-align: center;
+  color: #dc3545;
+}
+
+.no-results-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+/* Highlighted node styles */
+.node.highlighted circle {
+  stroke: #ff6b35 !important;
+  stroke-width: 4px !important;
+  filter: drop-shadow(0 0 8px rgba(255, 107, 53, 0.6));
+}
+
+.node.highlighted text {
+  fill: #ff6b35 !important;
+  font-weight: bold !important;
+}
+
+.highlight-btn {
+  background: linear-gradient(135deg, #ff6b35, #f7931e) !important;
+  color: white !important;
+}
+
 /* Mobile styles */
 @media (max-width: 767px) {
   .family-tree-page {
@@ -731,6 +1227,50 @@ const handleResize = () => {
     font-size: 0.9rem;
   }
 
+  .search-section {
+    margin-bottom: 20px;
+  }
+
+  .search-container {
+    max-width: 100%;
+  }
+
+  .search-input-wrapper {
+    border-radius: 20px;
+  }
+
+  .search-input {
+    padding: 10px 14px;
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+
+  .search-btn, .clear-btn {
+    padding: 10px 12px;
+  }
+
+  .result-item {
+    padding: 10px 12px;
+  }
+
+  .result-avatar {
+    width: 35px;
+    height: 35px;
+    margin-right: 10px;
+  }
+
+  .result-name {
+    font-size: 13px;
+  }
+
+  .result-details {
+    font-size: 11px;
+  }
+
+  .focus-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
   .tree-controls {
     flex-direction: column;
     align-items: center;
@@ -750,7 +1290,7 @@ const handleResize = () => {
   }
 
   #tree-container {
-    height: calc(100vh - 280px);
+    height: calc(100vh - 350px); /* Adjusted for search section */
     min-height: 350px;
     border-radius: 12px;
   }
@@ -780,5 +1320,20 @@ const handleResize = () => {
     dy: 35px;
   }
 
+}
+
+/* Tablet styles */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .search-input {
+    font-size: 16px;
+  }
+
+  #tree-container {
+    height: calc(100vh - 320px); /* Adjusted for search section */
+  }
+
+  .results-list {
+    max-height: 250px;
+  }
 }
 </style>
