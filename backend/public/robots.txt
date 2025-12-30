@@ -1,2 +1,5 @@
 User-agent: *
-Disallow:
+Disallow: /
+
+# This is an API backend - no indexing allowed
+# All endpoints are private and require authentication

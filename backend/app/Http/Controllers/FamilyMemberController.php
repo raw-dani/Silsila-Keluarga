@@ -38,7 +38,7 @@ class FamilyMemberController extends Controller
             'father_id' => 'nullable|exists:family_members,id',
             'mother_id' => 'nullable|exists:family_members,id',
             'spouse_id' => 'nullable|exists:family_members,id',
-            'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048|dimensions:min_width=100,min_height=100,max_width=2000,max_height=2000',
             'notes' => 'nullable|string',
         ]);
 

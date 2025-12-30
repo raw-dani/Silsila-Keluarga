@@ -1,0 +1,9 @@
+# Security Policy for Silsila Keluarga API
+
+Contact: admin@silsila-keluarga.com
+Expires: 2026-12-30T23:59:59.000Z
+Preferred-Languages: id, en
+
+# This is a private family management application
+# Security vulnerabilities should be reported to the contact above
+# Please do not attempt to access or modify data without authorization

@@ -7,13 +7,16 @@ use App\Http\Controllers\UpdateRequestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
+// Apply security middleware to all API routes
+Route::middleware(['force.https', 'cors', 'security.headers', 'throttle:60,1'])->group(function () {
+
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
 // Authentication routes
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('brute.force');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
 // Public routes (no authentication required)
@@ -63,3 +66,5 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/save-slider-data', [AdminController::class, 'saveSliderData']);
     });
 });
+
+}); // Close the throttle middleware group

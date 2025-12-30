@@ -14,6 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'admin' => \App\Http\Middleware\CheckAdminRole::class,
+            'throttle' => \App\Http\Middleware\RateLimitRequests::class,
+            'cors' => \App\Http\Middleware\CorsMiddleware::class,
+            'security.headers' => \App\Http\Middleware\SecurityHeadersMiddleware::class,
+            'brute.force' => \App\Http\Middleware\BruteForceProtection::class,
+            'force.https' => \App\Http\Middleware\ForceHttps::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
