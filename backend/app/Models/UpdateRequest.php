@@ -13,6 +13,7 @@ class UpdateRequest extends Model
         'change_type',
         'old_data',
         'new_data',
+        'photo',
         'status',
         'admin_note'
     ];

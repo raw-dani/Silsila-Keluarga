@@ -24,7 +24,7 @@
           <strong>Jenis:</strong> Penambahan Anggota Keluarga
         </p>
         <p v-else>
-          <strong>Anggota:</strong> {{ request.targetMember?.name }}
+          <strong>Anggota:</strong> {{ request.target_member?.name }}
         </p>
         <p v-if="request.change_type === 'add_member'">
           <strong>Detail Anggota Baru:</strong>
@@ -48,7 +48,47 @@
             </p>
           </div>
         </div>
-        <p v-else><strong>Data Baru:</strong> {{ request.new_data }}</p>
+        <!-- Dynamic content based on change type -->
+        <div v-else class="request-details">
+          <div v-if="getRequestType(request) === 'biodata'" class="biodata-details">
+            <h4>📋 Biodata Baru:</h4>
+            <div class="data-grid">
+              <div v-if="getBiodataField(request, 'name')"><strong>Nama:</strong> {{ getBiodataField(request, 'name') }}</div>
+              <div v-if="getBiodataField(request, 'email')"><strong>Email:</strong> {{ getBiodataField(request, 'email') }}</div>
+              <div v-if="getBiodataField(request, 'phone')"><strong>Telepon:</strong> {{ getBiodataField(request, 'phone') }}</div>
+              <div v-if="getBiodataField(request, 'gender')"><strong>Jenis Kelamin:</strong> {{ getBiodataField(request, 'gender') === 'male' ? 'Laki-laki' : 'Perempuan' }}</div>
+              <div v-if="getBiodataField(request, 'birth_date')"><strong>Tanggal Lahir:</strong> {{ formatDate(getBiodataField(request, 'birth_date')) }}</div>
+              <div v-if="getBiodataField(request, 'death_date')"><strong>Tanggal Meninggal:</strong> {{ formatDate(getBiodataField(request, 'death_date')) }}</div>
+            </div>
+          </div>
+
+          <div v-else-if="getRequestType(request) === 'hubungan'" class="relationship-details">
+            <h4>👨‍👩‍👧 Hubungan Baru:</h4>
+            <div class="relationship-info">
+              <div><strong>Pasangan:</strong> {{ getSpouseName(request) }}</div>
+            </div>
+          </div>
+
+          <div v-else-if="getRequestType(request) === 'foto'" class="photo-details">
+            <h4>📸 Foto Baru:</h4>
+            <div class="photo-preview">
+              <img
+                v-if="request.photo"
+                :src="getPhotoUrl(request.photo)"
+                :alt="'Foto baru untuk ' + request.targetMember?.name"
+                class="request-photo"
+              >
+              <div v-else class="no-photo">
+                <div class="photo-placeholder">📸</div>
+                <p>Foto akan diupload saat pengajuan</p>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="generic-details">
+            <strong>Data Baru:</strong> {{ request.new_data }}
+          </div>
+        </div>
         <div class="actions">
           <button @click="approveRequest(request.id)" class="approve-btn">Approve</button>
           <button @click="rejectRequest(request.id)" class="reject-btn">Reject</button>
@@ -535,6 +575,21 @@ const loadRequests = async () => {
   try {
     const response = await api.get('/update-requests?status=pending')
     pendingRequests.value = response.data
+
+    console.log('🎯 DEBUG AdminPanel: Loaded requests:', pendingRequests.value)
+    pendingRequests.value.forEach((request, index) => {
+    console.log(`Request ${index}:`, {
+        id: request.id,
+        change_type: request.change_type,
+        target_member_id: request.target_member_id,
+        photo: request.photo,
+        new_data: request.new_data,
+        member: request.member,
+        target_member: request.target_member,
+        targetMemberName: request.target_member?.name,
+        hasTargetMemberRelation: !!request.target_member
+      })
+    })
   } catch (error) {
     console.error('Error loading requests:', error)
   }
@@ -629,7 +684,10 @@ const saveMember = async () => {
         if ((key === 'father_id' || key === 'mother_id' || key === 'spouse_id') && formData.value[key] === '') {
           return // Skip empty parent/spouse IDs
         }
-        data.append(key, formData.value[key])
+        // Skip photo field as it's handled separately via photoFile
+        if (key !== 'photo') {
+          data.append(key, formData.value[key])
+        }
       }
     })
 
@@ -934,6 +992,40 @@ const getRelationInfo = (request) => {
   const targetMember = familyMembers.value.find(m => m.id == request.target_member_id)
   return targetMember ? targetMember.name : null
 }
+
+// Request data parsing functions
+const getRequestType = (request) => {
+  try {
+    const data = JSON.parse(request.new_data)
+    return data.type || null
+  } catch (error) {
+    return null
+  }
+}
+
+const getBiodataField = (request, field) => {
+  try {
+    const data = JSON.parse(request.new_data)
+    if (data.type === 'biodata' && data.data) {
+      return data.data[field] || null
+    }
+    return null
+  } catch (error) {
+    return null
+  }
+}
+
+const getSpouseName = (request) => {
+  try {
+    const data = JSON.parse(request.new_data)
+    if (data.type === 'hubungan') {
+      return data.spouse_name || 'Tidak ditemukan'
+    }
+    return null
+  } catch (error) {
+    return null
+  }
+}
 </script>
 
 <style scoped>
@@ -1036,6 +1128,84 @@ const getRelationInfo = (request) => {
 .request-card:hover, .member-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.request-details {
+  margin-top: 15px;
+}
+
+.biodata-details, .relationship-details, .photo-details {
+  background: rgba(107, 79, 63, 0.05);
+  border: 1px solid rgba(107, 79, 63, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.biodata-details h4, .relationship-details h4, .photo-details h4 {
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.data-grid > div {
+  background: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(107, 79, 63, 0.1);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.relationship-info {
+  background: white;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(107, 79, 63, 0.1);
+}
+
+.photo-preview {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid rgba(107, 79, 63, 0.1);
+  padding: 16px;
+}
+
+.request-photo {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid rgba(107, 79, 63, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.photo-placeholder {
+  font-size: 4rem;
+  opacity: 0.6;
+}
+
+.generic-details {
+  background: rgba(244, 67, 54, 0.05);
+  border: 1px solid rgba(244, 67, 54, 0.2);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 15px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 .actions {

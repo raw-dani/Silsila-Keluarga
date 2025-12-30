@@ -19,6 +19,19 @@ class UpdateRequestController extends Controller
             ->where('status', $status)
             ->get();
 
+        // Ensure relationships are loaded properly
+        $requests->transform(function ($request) {
+            // Load targetMember relationship if not loaded
+            if (!$request->relationLoaded('targetMember') && $request->target_member_id) {
+                $request->load('targetMember');
+            }
+            // Load member relationship if not loaded
+            if (!$request->relationLoaded('member') && $request->member_id) {
+                $request->load('member');
+            }
+            return $request;
+        });
+
         return response()->json($requests);
     }
 
