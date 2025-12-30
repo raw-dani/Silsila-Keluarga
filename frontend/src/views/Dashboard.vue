@@ -8,10 +8,10 @@
         <div class="hero-content">
           <div class="hero-text">
             <h1 class="hero-title">
-              <span class="hero-greeting">Selamat datang,</span>
-              <span class="hero-name">{{ userName }}</span>
+              <span class="hero-greeting">Selamat datang di</span>
+              <span class="hero-family-name">{{ familyName }}</span>
             </h1>
-            <p class="hero-subtitle">Kelola data keluarga Anda dengan mudah dan teratur</p>
+            <p class="hero-subtitle">Halo {{ userName }}, kelola data keluarga Anda dengan mudah dan teratur</p>
           </div>
           <div class="hero-visual">
             <div class="family-icon">👨‍👩‍👧‍👦</div>
@@ -285,6 +285,7 @@ const submittingRequest = ref(false)
 const familyMembers = ref([])
 const userInfo = ref(null)
 const photoPreview = ref(null)
+const familyName = ref('Keluarga Besar')
 
 const addMemberForm = ref({
   name: '',
@@ -333,6 +334,19 @@ onMounted(async () => {
     console.error('Error loading user info:', error)
     userName.value = 'User'
     userId.value = '1'
+  }
+
+  // Get family name from API
+  try {
+    console.log('Dashboard: Loading family name from API...')
+    const familyResponse = await api.get('/family-name')
+    console.log('Dashboard: Family API response:', familyResponse.data)
+    familyName.value = familyResponse.data.family_name || 'Keluarga Besar'
+    console.log('Dashboard: Set family name to:', familyName.value)
+  } catch (error) {
+    console.error('Dashboard: Error loading family name:', error)
+    console.error('Dashboard: Error details:', error.response)
+    // Keep default value
   }
 
   const role = localStorage.getItem('role')
@@ -559,6 +573,17 @@ const removePhoto = () => {
 .hero-name {
   display: block;
   font-size: 2.8rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 2px 4px rgba(107, 79, 63, 0.1);
+}
+
+.hero-family-name {
+  display: block;
+  font-size: 3.2rem;
   font-weight: 900;
   background: linear-gradient(135deg, var(--primary), var(--secondary));
   -webkit-background-clip: text;

@@ -4,7 +4,7 @@
 
     <div class="family-tree-content">
       <div class="tree-header">
-        <h1>Pohon Keluarga</h1>
+        <h1>Pohon Keluarga {{ familyName }}</h1>
         <p>Visualisasi interaktif silsilah keluarga dengan fitur zoom dan pan</p>
       </div>
 
@@ -119,6 +119,7 @@ const treeContainer = ref(null)
 const svgElement = ref(null)
 const loading = ref(true)
 const familyData = ref([])
+const familyName = ref('Keluarga Besar')
 
 // Search related variables
 const searchQuery = ref('')
@@ -147,6 +148,19 @@ const getPhotoUrl = (photoPath) => {
 }
 
 onMounted(async () => {
+  // Load family name from API
+  try {
+    console.log('FamilyTree: Loading family name from API...')
+    const familyResponse = await api.get('/family-name')
+    console.log('FamilyTree: Family API response:', familyResponse.data)
+    familyName.value = familyResponse.data.family_name || 'Keluarga Besar'
+    console.log('FamilyTree: Set family name to:', familyName.value)
+  } catch (error) {
+    console.error('FamilyTree: Error loading family name:', error)
+    console.error('FamilyTree: Error details:', error.response)
+    // Keep default value
+  }
+
   await loadFamilyData()
   await nextTick()
   renderTree()

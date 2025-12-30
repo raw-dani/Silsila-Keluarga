@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AppSettingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FamilyMemberController;
 use App\Http\Controllers\UpdateRequestController;
@@ -21,6 +22,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanc
 
 // Public routes (no authentication required)
 Route::get('/slider-data', [AdminController::class, 'getSliderData']);
+Route::get('/family-name', [AppSettingController::class, 'getFamilyName']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -64,6 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('users', AdminController::class);
         Route::post('/upload-slider-image', [AdminController::class, 'uploadSliderImage']);
         Route::post('/save-slider-data', [AdminController::class, 'saveSliderData']);
+        Route::put('/family-name', [AppSettingController::class, 'updateFamilyName']);
     });
 });
 

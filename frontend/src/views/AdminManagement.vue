@@ -8,6 +8,40 @@
         <p>Kelola pengguna admin yang dapat mengakses sistem manajemen aplikasi</p>
       </div>
 
+      <!-- Family Name Management Section -->
+      <div class="family-name-container">
+        <div class="form-card">
+          <h3 class="card-title">🏠 Nama Keluarga Besar</h3>
+          <p class="card-description">Update nama keluarga besar yang ditampilkan di seluruh aplikasi</p>
+
+          <form @submit.prevent="updateFamilyName" class="family-name-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="familyName">Nama Keluarga</label>
+                <input
+                  id="familyName"
+                  v-model="familyName"
+                  type="text"
+                  required
+                  class="form-input"
+                  placeholder="Masukkan nama keluarga besar"
+                  minlength="3"
+                  maxlength="255"
+                >
+                <small class="form-help">Nama ini akan ditampilkan di Dashboard dan halaman Pohon Keluarga</small>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" :disabled="loadingFamilyName" class="submit-btn">
+                <span class="btn-icon">{{ loadingFamilyName ? '⏳' : '💾' }}</span>
+                <span>{{ loadingFamilyName ? 'Menyimpan...' : 'Simpan Nama Keluarga' }}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- Add New Admin Section -->
       <div class="admin-form-container">
         <div class="form-card">
@@ -253,8 +287,10 @@ const newAdmin = ref({
 
 const admins = ref([])
 const loading = ref(false)
+const loadingFamilyName = ref(false)
 const message = ref('')
 const messageType = ref('')
+const familyName = ref('Keluarga Besar')
 
 // Slider management - Load from API or use defaults
 const loginSlides = ref([
@@ -315,6 +351,20 @@ const loadSlidesFromAPI = async () => {
     message.value = 'Gagal memuat data slider. Menggunakan nilai default.'
     messageType.value = 'error'
     setTimeout(() => message.value = '', 5000)
+  }
+}
+
+const loadFamilyName = async () => {
+  try {
+    console.log('🔄 AdminManagement: Loading family name from API...')
+    const response = await api.get('/family-name')
+    console.log('📦 Admin loading family name from API:', response.data)
+    familyName.value = response.data.family_name || 'Keluarga Besar'
+    console.log('✅ Admin family name loaded:', familyName.value)
+  } catch (error) {
+    console.error('❌ Error loading family name in admin:', error)
+    console.log('Keeping default value due to API error')
+    // Keep default value if API fails
   }
 }
 
@@ -736,9 +786,52 @@ const loadSlides = () => {
   }
 }
 
+const updateFamilyName = async () => {
+  if (!familyName.value.trim()) {
+    message.value = 'Nama keluarga tidak boleh kosong'
+    messageType.value = 'error'
+    return
+  }
+
+  loadingFamilyName.value = true
+  message.value = ''
+
+  try {
+    console.log('Sending family name:', familyName.value.trim())
+    const response = await api.put('/admin/family-name', {
+      family_name: familyName.value.trim()
+    })
+
+    console.log('Response:', response.data)
+    message.value = `Nama keluarga berhasil diperbarui menjadi "${response.data.family_name}"`
+    messageType.value = 'success'
+    setTimeout(() => message.value = '', 3000)
+  } catch (error) {
+    console.error('Full error object:', error)
+    console.error('Error response:', error.response)
+    console.error('Error status:', error.response?.status)
+    console.error('Error data:', error.response?.data)
+
+    let errorMessage = 'Gagal memperbarui nama keluarga'
+
+    if (error.response?.status === 500) {
+      errorMessage = 'Server error: Pastikan tabel app_settings sudah dibuat. Jalankan SQL script di backend/create_table.sql'
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    }
+
+    message.value = errorMessage
+    messageType.value = 'error'
+    setTimeout(() => message.value = '', 10000) // Show error longer
+  } finally {
+    loadingFamilyName.value = false
+  }
+}
+
 onMounted(() => {
   loadAdmins()
   loadSlidesFromAPI() // Load slides from API
+  loadFamilyName() // Load family name from API
 })
 </script>
 
@@ -1371,6 +1464,23 @@ onMounted(() => {
   border-radius: 8px;
   border: 2px solid rgba(107, 79, 63, 0.2);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Family Name Form Styles */
+.family-name-container {
+  margin-bottom: 32px;
+}
+
+.family-name-form {
+  display: grid;
+  gap: 20px;
+}
+
+.form-help {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-top: 4px;
 }
 
 /* Mobile styles */
