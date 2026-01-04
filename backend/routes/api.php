@@ -9,7 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Apply security middleware to all API routes
-Route::middleware(['force.https', 'cors', 'security.headers', 'throttle:60,1'])->group(function () {
+// Temporarily disabled for debugging - re-enable after fixing 404
+Route::group([], function () {
 
 Route::get('/user', function (Request $request) {
     return $request->user();
