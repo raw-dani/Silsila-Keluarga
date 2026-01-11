@@ -16,8 +16,8 @@ class AdminController extends Controller
      */
     public function index()
     {
-        $admins = User::where('role', 'admin')
-            ->select('id', 'name', 'email', 'created_at')
+        $admins = User::whereIn('role', ['admin', 'sub_admin'])
+            ->select('id', 'name', 'email', 'role', 'created_at')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -39,7 +39,7 @@ class AdminController extends Controller
                 'confirmed',
                 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/'
             ],
-            'role' => 'required|in:admin'
+            'role' => 'required|in:admin,sub_admin'
         ], [
             'password.min' => 'Password must be at least 12 characters long.',
             'password.regex' => 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
@@ -78,18 +78,29 @@ class AdminController extends Controller
             ], 403);
         }
 
-        // Check if there are other admins
-        $adminCount = User::where('role', 'admin')->count();
+        // Check if there are other admins (both admin and sub_admin roles)
+        $adminCount = User::whereIn('role', ['admin', 'sub_admin'])->count();
         if ($adminCount <= 1) {
             return response()->json([
-                'message' => 'Cannot delete the last admin user'
+                'message' => 'Cannot delete the last admin user. At least one admin account must remain.'
             ], 403);
+        }
+
+        // If deleting a sub_admin, allow it (since admin can manage sub_admins)
+        // If deleting an admin, ensure there's at least one admin left
+        if ($user->role === 'admin') {
+            $pureAdminCount = User::where('role', 'admin')->count();
+            if ($pureAdminCount <= 1) {
+                return response()->json([
+                    'message' => 'Cannot delete the last admin account. At least one admin account must remain.'
+                ], 403);
+            }
         }
 
         $user->delete();
 
         return response()->json([
-            'message' => 'Admin user deleted successfully'
+            'message' => 'User deleted successfully'
         ]);
     }
 

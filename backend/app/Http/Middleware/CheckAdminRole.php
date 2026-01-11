@@ -15,8 +15,8 @@ class CheckAdminRole
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user() && $request->user()->role !== 'admin') {
-            return response()->json(['message' => 'Access denied. Admin role required.'], 403);
+        if ($request->user() && !in_array($request->user()->role, ['admin', 'sub_admin'])) {
+            return response()->json(['message' => 'Access denied. Admin or Sub Admin role required.'], 403);
         }
 
         return $next($request);
